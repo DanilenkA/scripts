@@ -1,0 +1,12 @@
+backend ingress_backend
+    mode http
+    balance roundrobin                         # Также можно balance leastconn (по самому незагруженному) и balance source (по источнику запроса)
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response set-header Referrer-Policy no-referrer-when-downgrade
+    option forwardfor                          
+    default-server inter 2s fall 2 rise 2      
+
+    # Список серверов
+    server node1 %ip1%:8081 check maxconn 50000
+    server node2 %ip2%:8081 check maxconn 50000
+    server node3 %ip3%:8081 check maxconn 50000

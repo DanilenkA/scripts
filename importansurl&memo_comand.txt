@@ -1,0 +1,60 @@
+https://github.com/stilicho2011/ubuntu_rep/tree/main/nut%20server%20on%20proxmox - UPS Proxmox
+
+https://www.digitalocean.com/community/tools/nginx  - проверка и генерация конфы для nginx
+
+модули для nginx https://nginx.org/en/docs/http/ngx_http_upstream_module.html
+
+нагрузочный тест для сайтов https://github.com/grafana/k6
+
+очень классная репа wireshark https://github.com/amwalding/wireshark_profiles
+
+Хороший сайт для просмотра определения DNS записей  https://zonemaster.net 
+
+https://lizardsystems.com/terminal-services-manager/ - хорошая софтина для RDP сервера, проверяет юзверей, кто/когда/куда
+
+https://kuharbogdan.com/category/administratoru-1s/ - полезные скрипты для 1с
+
+
+аудит безопасности https://vulners.com/scanner/audit
+слева в меню Manual Audit, указыаем свою версию системы и получаем команду для выгрузки информации о пакетах. Для Debian она будет такая:
+# dpkg-query -W -f='${Status} ${Package} ${Version} ${Architecture}\n'|awk '($1 == "install") && ($2 == "ok") {print $4" "$5" "$6}' вывод копируем на сайт, все уязвимости будут показаны
+проверять систему на уязвимости автоматически с помощью Agent Scanner.зарегистрироваться в системе и получить API для агента. Бесплатный тарифный план позволяет использовать до 10-ти агентов, но через VPN потому что санкции
+у клаудфлейр в блоке есть что-то близкое https://blog.cloudflare.com/introducing-flan-scan
+в репу кладём файл ip shared/ips.txt
+потом make build /start/html результаты в папке shared/reports
+
+
+Если нужно быстро скачать из apt то, что блокируют, то wget нужно кинуть в проксю
+
+файл  ~/.wgetrc
+use_proxy=yes
+http_proxy=127.0.0.1:%port%
+https_proxy=127.0.0.1:%port%
+
+для прокси подойдет apt install privoxy
+
+для докера нужно так
+
+# mkdir -p /etc/systemd/system/docker.service.d
+# mcedit /etc/systemd/system/docker.service.d/http-proxy.conf
+
+[Service]
+Environment="HTTP_PROXY=http://127.0.0.1:%port%"
+Environment="HTTPS_PROXY=http://127.0.0.1:%port%"
+
+ # systemctl daemon-reload
+ # systemctl restart docker
+ 
+Установка docker одной командой curl -o - https://get.docker.com | bash -
+
+
+Отправка уведовлений в мессенджеры
+https://github.com/caronc/apprise
+Пересылка smtp в apprise https://github.com/YoRyan/mailrise
+
+Если нужно слать из скрипта сообщения 
+!!
+echo -e "Subject: Test Subject \nTest body message." > /tmp/body.txt && curl -v --url "smtp://mail.server.com:25" --mail-from root@server.com --mail-rcpt user@example.com --user 'root@server.com:password123' --upload-file "/tmp/body.txt"
+!!
+
+

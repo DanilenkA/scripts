@@ -1,5 +1,16 @@
 https://github.com/stilicho2011/ubuntu_rep/tree/main/nut%20server%20on%20proxmox - UPS Proxmox
 
+лучшая панель для хостинга 
+https://hestiacp.com/
+
+
+маленький бинарь, который умеет следить за актуальностью образов docker и слать уведовления, когда выходит новый
+https://crazymax.dev/diun/install/docker/
+
+Статья о безопасности кубера, толковая, можно брать как шпору 
+https://habr.com/ru/companies/T1Holding/articles/816611/
+
+
 https://www.digitalocean.com/community/tools/nginx  - проверка и генерация конфы для nginx
 
 модули для nginx https://nginx.org/en/docs/http/ngx_http_upstream_module.html

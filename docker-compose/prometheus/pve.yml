@@ -1,0 +1,5 @@
+default:
+    user: %username%@pve
+    password: %password%
+    # Optional: set to false to skip SSL/TLS verification
+    verify_ssl: false

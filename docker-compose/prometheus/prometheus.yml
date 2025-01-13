@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 10s  # Частота опроса всех источников
+  evaluation_interval: 10s  # Частота вычисления правил
+
+scrape_configs:
+  # Мониторинг самого Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Мониторинг Proxmox через PVE Exporter
+  - job_name: 'pve'
+    metrics_path: /pve
+    static_configs:
+      - targets:
+          - %ip_or_hostname%
+          - %ip_or_hostname%
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: pve-exporter:9221  # PVE Exporter
+  - job_name: 'windows_exporter'
+    static_configs:
+      - targets: ['%ip%:9182'] # Адрес Windows Exporter
+  - job_name: 'sql_server_exporter'
+    static_configs:
+      - targets: ['%ip%:4000']  # Адрес SQL Server Exporter
+
+# Интеграция с InfluxDB
+remote_write:
+  - url: "http://influxdb:8086/api/v1/prom/write?db=proxmox_metrics"
+    basic_auth:
+      username: %username%           # Имя пользователя InfluxDB
+      password: %password%  # Пароль InfluxDB

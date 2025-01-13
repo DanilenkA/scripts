@@ -25,6 +25,10 @@ https://lizardsystems.com/terminal-services-manager/ - хорошая софти
 
 https://kuharbogdan.com/category/administratoru-1s/ - полезные скрипты для 1с
 
+Очень годная софтина для бэкапа одиночных машин на форточках https://www.easyuefi.com/backup-software/backup-suite-free.html
+
+Гайд по настройке метрик с PG для prometheus https://rezakhademix.medium.com/a-complete-guide-to-monitor-postgresql-with-prometheus-and-grafana-5611af229882
+
 
 аудит безопасности https://vulners.com/scanner/audit
 слева в меню Manual Audit, указыаем свою версию системы и получаем команду для выгрузки информации о пакетах. Для Debian она будет такая:

@@ -84,78 +84,13 @@ EXEC xp_cmdshell 'forfiles /P \\%network_patch%\%mssql_servername%\ /D -30 /C "c
 
 
 -- Задаём переменные для использования в скрипте
-DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (В зависимости от локализации 6=Суббота или 7 = Суббота (США))
-DECLARE @BackupType NVARCHAR(50);
-DECLARE @DatabaseName NVARCHAR(255);
-DECLARE @BackupPath NVARCHAR(500);
-DECLARE @DatabaseFolder NVARCHAR(500);
-
--- Папка для хранения резервных копий
-DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
-
--- Список баз данных для резервного копирования
-DECLARE @Databases TABLE (DatabaseName NVARCHAR(255));
-INSERT INTO @Databases (DatabaseName)
-VALUES ('database1'), ('database2'), ('database3');
-
--- Установка типа резервного копирования
-IF @DayOfWeek = 7
-    SET @BackupType = 'FULL';
-ELSE
-    SET @BackupType = 'DIFFERENTIAL';
-
--- Цикл по базам данных
-DECLARE db_cursor CURSOR FOR SELECT DatabaseName FROM @Databases;
-OPEN db_cursor;
-FETCH NEXT FROM db_cursor INTO @DatabaseName;
-
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    -- Определяем папку для текущей базы данных
-    SET @DatabaseFolder = CONCAT(@BackupFolder, @DatabaseName, '\');
-    
-    -- Создаём папку, если она не существует
-    DECLARE @CreateFolderCommand NVARCHAR(500);
-    SET @CreateFolderCommand = 'mkdir "' + @DatabaseFolder + '"';
-    EXEC xp_cmdshell @CreateFolderCommand;
-
-    -- Формируем путь к файлу резервной копии
-    SET @BackupPath = CONCAT(@DatabaseFolder, @DatabaseName, '_', @BackupType, '_', FORMAT(GETDATE(), 'yyyyMMdd_HHmmss'), '.bak');
-
-    -- Выполняем резервное копирование
-    IF @BackupType = 'FULL'
-    BEGIN
-        PRINT CONCAT('Создаётся полная копия для базы: ', @DatabaseName);
-        BACKUP DATABASE @DatabaseName
-        TO DISK = @BackupPath
-        WITH FORMAT, INIT, SKIP, CHECKSUM, STATS = 10;
-    END
-    ELSE
-    BEGIN
-        PRINT CONCAT('Создаётся дифференциальная копия для базы: ', @DatabaseName);
-        BACKUP DATABASE @DatabaseName
-        TO DISK = @BackupPath
-        WITH DIFFERENTIAL, INIT, SKIP, CHECKSUM, STATS = 10;
-    END
-
-    -- Переход к следующей базе данных
-    FETCH NEXT FROM db_cursor INTO @DatabaseName;
-END;
-
--- Закрываем курсор
-CLOSE db_cursor;
-DEALLOCATE db_cursor;
-
--- если базы в полном режиме восстановления, то нужно учесть резервирование и очистку журнала
-
-
--- Задаём переменные для использования в скрипте
-DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (7 = Суббота)
+DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяет текущий день недели (1 = Воскресенье, 7 = Суббота)
 DECLARE @BackupType NVARCHAR(50);
 DECLARE @DatabaseName NVARCHAR(255);
 DECLARE @BackupPath NVARCHAR(500);
 DECLARE @LogBackupPath NVARCHAR(500);
 DECLARE @DatabaseFolder NVARCHAR(500);
+DECLARE @LogicalLogFile NVARCHAR(255);
 
 -- Папка для хранения резервных копий
 DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
@@ -163,10 +98,10 @@ DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
 -- Список баз данных для резервного копирования
 DECLARE @Databases TABLE (DatabaseName NVARCHAR(255));
 INSERT INTO @Databases (DatabaseName)
-VALUES ('database1'), ('database2'), ('database3');
+VALUES ('DataBase');
 
 -- Установка типа резервного копирования
-IF @DayOfWeek = 7 -- Суббота
+IF @DayOfWeek = 5
     SET @BackupType = 'FULL';
 ELSE
     SET @BackupType = 'DIFFERENTIAL';
@@ -193,25 +128,49 @@ BEGIN
     IF @BackupType = 'FULL'
     BEGIN
         PRINT CONCAT('Создаётся полная копия для базы: ', @DatabaseName);
-        BACKUP DATABASE @DatabaseName
-        TO DISK = @BackupPath
-        WITH FORMAT, INIT, SKIP, CHECKSUM, STATS = 10, COMPRESSION;
+        EXEC('BACKUP DATABASE [' + @DatabaseName + '] TO DISK = N''' + @BackupPath + ''' WITH FORMAT, INIT, SKIP, CHECKSUM, STATS = 10');
 
         -- Формируем путь к файлу резервной копии журнала транзакций
         SET @LogBackupPath = CONCAT(@DatabaseFolder, @DatabaseName, '_LOG_', FORMAT(GETDATE(), 'yyyyMMdd_HHmmss'), '.trn');
 
-        -- Создаём резервную копию журнала транзакций
+        -- Выполняем резервное копирование журнала транзакций
         PRINT CONCAT('Создаётся резервная копия журнала для базы: ', @DatabaseName);
-        BACKUP LOG @DatabaseName
-        TO DISK = @LogBackupPath
-        WITH FORMAT, INIT, CHECKSUM, STATS = 10, COMPRESSION;
+        EXEC('BACKUP LOG [' + @DatabaseName + '] TO DISK = N''' + @LogBackupPath + ''' WITH INIT, SKIP, CHECKSUM, STATS = 10');
+
+        -- Переключение в режим SIMPLE
+        PRINT CONCAT('Переключение базы данных "', @DatabaseName, '" в режим восстановления SIMPLE.');
+        EXEC('ALTER DATABASE [' + @DatabaseName + '] SET RECOVERY SIMPLE');
+
+        -- Получаем логическое имя файла журнала
+        SELECT TOP 1 @LogicalLogFile = name
+        FROM sys.master_files
+        WHERE database_id = DB_ID(@DatabaseName) AND type_desc = 'LOG';
+
+        IF @LogicalLogFile IS NOT NULL
+        BEGIN
+            -- Сжимаем файл журнала транзакций в режиме SIMPLE
+            BEGIN TRY
+                PRINT CONCAT('Сжатие файла журнала транзакций для базы данных "', @DatabaseName, '".');
+                EXEC('USE [' + @DatabaseName + ']; DBCC SHRINKFILE (N''' + @LogicalLogFile + ''', TRUNCATEONLY)');
+                PRINT CONCAT('Файл журнала для базы данных "', @DatabaseName, '" успешно сжат.');
+            END TRY
+            BEGIN CATCH
+                PRINT CONCAT('Не удалось сжать файл журнала для базы данных "', @DatabaseName, '": ', ERROR_MESSAGE());
+            END CATCH;
+        END
+        ELSE
+        BEGIN
+            PRINT CONCAT('Файл журнала для базы данных "', @DatabaseName, '" не найден или не существует.');
+        END
+
+        -- Возвращение в режим FULL
+        PRINT CONCAT('Возвращение базы данных "', @DatabaseName, '" в режим восстановления FULL.');
+        EXEC('ALTER DATABASE [' + @DatabaseName + '] SET RECOVERY FULL');
     END
     ELSE
     BEGIN
         PRINT CONCAT('Создаётся дифференциальная копия для базы: ', @DatabaseName);
-        BACKUP DATABASE @DatabaseName
-        TO DISK = @BackupPath
-        WITH DIFFERENTIAL, INIT, SKIP, CHECKSUM, STATS = 10, COMPRESSION;
+        EXEC('BACKUP DATABASE [' + @DatabaseName + '] TO DISK = N''' + @BackupPath + ''' WITH DIFFERENTIAL, INIT, SKIP, CHECKSUM, STATS = 10');
     END
 
     -- Переход к следующей базе данных
@@ -221,5 +180,3 @@ END;
 -- Закрываем курсор
 CLOSE db_cursor;
 DEALLOCATE db_cursor;
-
-

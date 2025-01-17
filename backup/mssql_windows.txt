@@ -84,7 +84,7 @@ EXEC xp_cmdshell 'forfiles /P \\%network_patch%\%mssql_servername%\ /D -30 /C "c
 
 
 -- Задаём переменные для использования в скрипте
-DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (7 = Суббота)
+DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (В зависимости от локализации 6=Суббота или 7 = Суббота (США))
 DECLARE @BackupType NVARCHAR(50);
 DECLARE @DatabaseName NVARCHAR(255);
 DECLARE @BackupPath NVARCHAR(500);
@@ -99,7 +99,7 @@ INSERT INTO @Databases (DatabaseName)
 VALUES ('database1'), ('database2'), ('database3');
 
 -- Установка типа резервного копирования
-IF @DayOfWeek = 7 -- Суббота
+IF @DayOfWeek = 7
     SET @BackupType = 'FULL';
 ELSE
     SET @BackupType = 'DIFFERENTIAL';

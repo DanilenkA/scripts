@@ -1,0 +1,225 @@
+Setup differential & full backup MS SQL DB
+
+cmd 
+
+# testing share smb connect
+net use \\%network_patch%\%mssql_servername%\ smb_pass /user:smbuser
+
+
+mssql
+
+0. create creds
+
+CREATE CREDENTIAL [smb_credential]
+WITH IDENTITY = 'smbuser',
+SECRET = 'smb_pass;
+
+
+1. 
+
+
+USE master;
+GO
+CREATE CREDENTIAL [BackupSMB] 
+WITH IDENTITY = N'smbuser', 
+     SECRET = N'smb_pass';
+GO
+
+2. 
+
+EXEC sp_configure 'xp_cmdshell', 1;
+RECONFIGURE WITH OVERRIDE;
+EXEC xp_cmdshell 'net use \\%network_patch%\%mssql_servername%\ smb_pass /user:smbuser;
+GO
+
+2.5
+
+EXEC xp_cmdshell 'dir \\%network_patch%\%mssql_servername%\';
+
+-- если возвращает список файлов, знчит шара настроена правильно
+
+2.9 -- расширенные настройки xp_cmd, если они выклчюены 
+
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE; -- расширенные параметры
+
+EXEC sp_configure 'xp_cmdshell', 1;
+RECONFIGURE;  -- включение компонента 
+
+EXEC sp_configure 'xp_cmdshell';  -- проверка
+
+EXEC sp_configure 'xp_cmdshell', 0;
+RECONFIGURE;  -- выключить после настройки для безопасности
+
+
+
+3. 
+
+BACKUP DATABASE [master] 
+TO DISK = N'\\%network_patch%\%mssql_servername%\master.bak'  -- this backup master DB
+WITH FORMAT, 
+     INIT, 
+     SKIP, 
+     CHECKSUM, 
+     STATS = 10;
+GO
+
+4. T-SQL script for automated 
+
+BACKUP DATABASE [master] 
+TO DISK = N'\\%network_patch%\%mssql_servername%\master.bak'
+WITH FORMAT, 
+     INIT, 
+     SKIP, 
+     CHECKSUM, 
+     STATS = 10;
+
+
+5. rotate backup 30 days
+
+EXEC xp_cmdshell 'forfiles /P \\%network_patch%\%mssql_servername%\ /D -30 /C "cmd /c del @path"';
+
+
+-- Full script for automated
+
+
+-- Задаём переменные для использования в скрипте
+DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (7 = Суббота)
+DECLARE @BackupType NVARCHAR(50);
+DECLARE @DatabaseName NVARCHAR(255);
+DECLARE @BackupPath NVARCHAR(500);
+DECLARE @DatabaseFolder NVARCHAR(500);
+
+-- Папка для хранения резервных копий
+DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
+
+-- Список баз данных для резервного копирования
+DECLARE @Databases TABLE (DatabaseName NVARCHAR(255));
+INSERT INTO @Databases (DatabaseName)
+VALUES ('database1'), ('database2'), ('database3');
+
+-- Установка типа резервного копирования
+IF @DayOfWeek = 7 -- Суббота
+    SET @BackupType = 'FULL';
+ELSE
+    SET @BackupType = 'DIFFERENTIAL';
+
+-- Цикл по базам данных
+DECLARE db_cursor CURSOR FOR SELECT DatabaseName FROM @Databases;
+OPEN db_cursor;
+FETCH NEXT FROM db_cursor INTO @DatabaseName;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    -- Определяем папку для текущей базы данных
+    SET @DatabaseFolder = CONCAT(@BackupFolder, @DatabaseName, '\');
+    
+    -- Создаём папку, если она не существует
+    DECLARE @CreateFolderCommand NVARCHAR(500);
+    SET @CreateFolderCommand = 'mkdir "' + @DatabaseFolder + '"';
+    EXEC xp_cmdshell @CreateFolderCommand;
+
+    -- Формируем путь к файлу резервной копии
+    SET @BackupPath = CONCAT(@DatabaseFolder, @DatabaseName, '_', @BackupType, '_', FORMAT(GETDATE(), 'yyyyMMdd_HHmmss'), '.bak');
+
+    -- Выполняем резервное копирование
+    IF @BackupType = 'FULL'
+    BEGIN
+        PRINT CONCAT('Создаётся полная копия для базы: ', @DatabaseName);
+        BACKUP DATABASE @DatabaseName
+        TO DISK = @BackupPath
+        WITH FORMAT, INIT, SKIP, CHECKSUM, STATS = 10;
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('Создаётся дифференциальная копия для базы: ', @DatabaseName);
+        BACKUP DATABASE @DatabaseName
+        TO DISK = @BackupPath
+        WITH DIFFERENTIAL, INIT, SKIP, CHECKSUM, STATS = 10;
+    END
+
+    -- Переход к следующей базе данных
+    FETCH NEXT FROM db_cursor INTO @DatabaseName;
+END;
+
+-- Закрываем курсор
+CLOSE db_cursor;
+DEALLOCATE db_cursor;
+
+-- если базы в полном режиме восстановления, то нужно учесть резервирование и очистку журнала
+
+
+-- Задаём переменные для использования в скрипте
+DECLARE @DayOfWeek INT = DATEPART(WEEKDAY, GETDATE()); -- Определяем текущий день недели (7 = Суббота)
+DECLARE @BackupType NVARCHAR(50);
+DECLARE @DatabaseName NVARCHAR(255);
+DECLARE @BackupPath NVARCHAR(500);
+DECLARE @LogBackupPath NVARCHAR(500);
+DECLARE @DatabaseFolder NVARCHAR(500);
+
+-- Папка для хранения резервных копий
+DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
+
+-- Список баз данных для резервного копирования
+DECLARE @Databases TABLE (DatabaseName NVARCHAR(255));
+INSERT INTO @Databases (DatabaseName)
+VALUES ('database1'), ('database2'), ('database3');
+
+-- Установка типа резервного копирования
+IF @DayOfWeek = 7 -- Суббота
+    SET @BackupType = 'FULL';
+ELSE
+    SET @BackupType = 'DIFFERENTIAL';
+
+-- Цикл по базам данных
+DECLARE db_cursor CURSOR FOR SELECT DatabaseName FROM @Databases;
+OPEN db_cursor;
+FETCH NEXT FROM db_cursor INTO @DatabaseName;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    -- Определяем папку для текущей базы данных
+    SET @DatabaseFolder = CONCAT(@BackupFolder, @DatabaseName, '\');
+    
+    -- Создаём папку, если она не существует
+    DECLARE @CreateFolderCommand NVARCHAR(500);
+    SET @CreateFolderCommand = 'mkdir "' + @DatabaseFolder + '"';
+    EXEC xp_cmdshell @CreateFolderCommand;
+
+    -- Формируем путь к файлу резервной копии базы данных
+    SET @BackupPath = CONCAT(@DatabaseFolder, @DatabaseName, '_', @BackupType, '_', FORMAT(GETDATE(), 'yyyyMMdd_HHmmss'), '.bak');
+
+    -- Выполняем резервное копирование базы данных
+    IF @BackupType = 'FULL'
+    BEGIN
+        PRINT CONCAT('Создаётся полная копия для базы: ', @DatabaseName);
+        BACKUP DATABASE @DatabaseName
+        TO DISK = @BackupPath
+        WITH FORMAT, INIT, SKIP, CHECKSUM, STATS = 10, COMPRESSION;
+
+        -- Формируем путь к файлу резервной копии журнала транзакций
+        SET @LogBackupPath = CONCAT(@DatabaseFolder, @DatabaseName, '_LOG_', FORMAT(GETDATE(), 'yyyyMMdd_HHmmss'), '.trn');
+
+        -- Создаём резервную копию журнала транзакций
+        PRINT CONCAT('Создаётся резервная копия журнала для базы: ', @DatabaseName);
+        BACKUP LOG @DatabaseName
+        TO DISK = @LogBackupPath
+        WITH FORMAT, INIT, CHECKSUM, STATS = 10, COMPRESSION;
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('Создаётся дифференциальная копия для базы: ', @DatabaseName);
+        BACKUP DATABASE @DatabaseName
+        TO DISK = @BackupPath
+        WITH DIFFERENTIAL, INIT, SKIP, CHECKSUM, STATS = 10, COMPRESSION;
+    END
+
+    -- Переход к следующей базе данных
+    FETCH NEXT FROM db_cursor INTO @DatabaseName;
+END;
+
+-- Закрываем курсор
+CLOSE db_cursor;
+DEALLOCATE db_cursor;
+
+

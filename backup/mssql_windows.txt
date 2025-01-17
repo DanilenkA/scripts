@@ -98,7 +98,13 @@ DECLARE @BackupFolder NVARCHAR(500) = '\\%network_patch%\%mssql_servername%\';
 -- Список баз данных для резервного копирования
 DECLARE @Databases TABLE (DatabaseName NVARCHAR(255));
 INSERT INTO @Databases (DatabaseName)
-VALUES ('DataBase');
+VALUES 
+    ('Database1'), 
+    ('Database2'), 
+    ('Database3'), 
+    ('Database4');
+-- при перечислении через Insert Into нужно указывать базы в отдельных строках или передвать в виде списка строк. 
+-- Лучше не использовать в скрипте исключение "кроме системных", плохо отрабатывает, часто ошибается, сложные скрипты. да муторно перечислять, но перечисления работают предсказуемо
 
 -- Установка типа резервного копирования
 IF @DayOfWeek = 5

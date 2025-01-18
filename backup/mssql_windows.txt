@@ -12,7 +12,7 @@ mssql
 
 CREATE CREDENTIAL [smb_credential]
 WITH IDENTITY = 'smbuser',
-SECRET = 'smb_pass;
+SECRET = 'smb_pass';
 
 
 1. 
